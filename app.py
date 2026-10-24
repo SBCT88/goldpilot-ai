@@ -26,7 +26,7 @@ div[data-testid="stMetric"] {background:#111722;border:1px solid #202b3b;padding
 </style>
 """, unsafe_allow_html=True)
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 LOCAL_DB = "goldpilot_local.db"
 TD_URL = "https://api.twelvedata.com/time_series"
 
@@ -108,7 +108,7 @@ def make_synthetic(interval: str, n: int = 180) -> pd.DataFrame:
     open_ = np.r_[close[0] - steps[0], close[:-1]]
     high = np.maximum(open_, close) + rng.uniform(0.2, 1.8, n)
     low = np.minimum(open_, close) - rng.uniform(0.2, 1.8, n)
-    freq = {"5min": "5min", "15min": "15min", "1h": "1h"}[interval]
+    freq = {"5min": "5min", "15min": "15min", "30min": "30min", "1h": "1h"}[interval]
     times = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq=freq)
     return pd.DataFrame({"Time": times, "Open": open_, "High": high, "Low": low, "Close": close})
 
@@ -238,8 +238,8 @@ with st.sidebar:
         ["Verified provider (Twelve Data)", "Synthetic lesson data"],
         index=0 if secret("TWELVE_DATA_API_KEY") else 1,
     )
-    timeframe_label = st.selectbox("Timeframe", ["M5", "M15", "H1"], index=1)
-    interval = {"M5": "5min", "M15": "15min", "H1": "1h"}[timeframe_label]
+    timeframe_label = st.selectbox("Timeframe", ["M5", "M15", "M30", "H1"], index=1)
+    interval = {"M5": "5min", "M15": "15min", "M30": "30min", "H1": "1h"}[timeframe_label]
     st.markdown("---")
     st.markdown("**Simulation risk controls**")
     equity = st.number_input("Demo equity (£)", min_value=50.0, value=500.0, step=50.0)
@@ -291,7 +291,7 @@ last_time = pd.to_datetime(latest["Time"], utc=True)
 age_minutes = max(0.0, (pd.Timestamp.now(tz="UTC") - last_time).total_seconds() / 60)
 if data_mode == "SYNTHETIC":
     st.warning("SYNTHETIC LESSON DATA — these candles and prices are generated for practice and are not real XAUUSD market data.")
-elif age_minutes > ({"M5": 20, "M15": 45, "H1": 150}[timeframe_label]):
+elif age_minutes > ({"M5": 20, "M15": 45, "M30": 90, "H1": 150}[timeframe_label]):
     st.warning(f"DATA MAY BE STALE: latest candle timestamp is {last_time:%Y-%m-%d %H:%M UTC} ({age_minutes:.0f} minutes ago). Do not use it to assess a current setup.")
 else:
     st.success(f"Data source: {provider_label} · latest candle open time: {last_time:%Y-%m-%d %H:%M UTC} · feed age: {age_minutes:.0f} min. Provider prices may differ from your broker's XAUUSD feed.")
@@ -317,8 +317,9 @@ with tabs[0]:
     fig.add_hline(y=resistance, line_dash="dot", annotation_text="Recent resistance")
     fig.update_layout(
         template="plotly_dark", paper_bgcolor="#080b11", plot_bgcolor="#080b11",
-        height=470, margin=dict(l=10, r=10, t=30, b=10),
+        height=520, margin=dict(l=10, r=10, t=35, b=10),
         xaxis_rangeslider_visible=False, legend=dict(orientation="h", y=1.05),
+        xaxis_title="Time (UTC)", yaxis_title="Price (USD)", hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True)
     a, b = st.columns(2)
@@ -410,7 +411,7 @@ with tabs[3]:
     st.caption(f"Storage mode: {persistence_label}")
     with st.form("journal_form"):
         jside = st.selectbox("Side", ["BUY", "SELL"])
-        jtimeframe = st.selectbox("Trade timeframe", ["M5", "M15", "H1"], index=["M5", "M15", "H1"].index(timeframe_label))
+        jtimeframe = st.selectbox("Trade timeframe", ["M5", "M15", "M30", "H1"], index=["M5", "M15", "M30", "H1"].index(timeframe_label))
         jentry = st.number_input("Entry price", min_value=0.01, value=round(last_price, 2), step=0.1)
         jstop = st.number_input("Stop-loss price", min_value=0.01, value=round(stop if "stop" in locals() else last_price - atr, 2), step=0.1)
         jtarget = st.number_input("Take-profit price", min_value=0.01, value=round(target if "target" in locals() else last_price + 2 * atr, 2), step=0.1)
@@ -491,7 +492,8 @@ with tabs[4]:
 
 **Implemented**
 - Selectable real-provider integration or clearly labelled synthetic lesson data
-- Timestamped candles and basic stale-data warning
+- Timestamped candlestick chart with EMA20 / EMA34 overlays and basic stale-data warning
+- M5, M15, M30 and H1 timeframe selection
 - EMA20 / EMA34, RSI(14), ATR(14), rolling support and resistance
 - Explainable rule checklist and hypothetical risk/reward calculator
 - Simulated trade journal with local SQLite fallback or optional Supabase storage
